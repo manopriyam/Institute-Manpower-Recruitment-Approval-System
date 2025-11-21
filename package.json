@@ -1,0 +1,26 @@
+{
+    "name": "institute-manpower-recruitment-approval-system",
+    "version": "1.0.0",
+    "description": "This project implements a terminal-based, blockchain-backed approval workflow for academic institutes managing manpower recruitment.",
+    "main": "index.js",
+    "scripts": {
+        "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/manopriyam/Institute-Manpower-Recruitment-Approval-System.git"
+    },
+    "author": "",
+    "license": "ISC",
+    "bugs": {
+        "url": "https://github.com/manopriyam/Institute-Manpower-Recruitment-Approval-System/issues"
+    },
+    "homepage": "https://github.com/manopriyam/Institute-Manpower-Recruitment-Approval-System#readme",
+    "devDependencies": {
+        "@nomicfoundation/hardhat-toolbox": "^6.1.0",
+        "hardhat": "^2.27.0"
+    },
+    "dependencies": {
+        "dotenv": "^17.2.3"
+    }
+}
