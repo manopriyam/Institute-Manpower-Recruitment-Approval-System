@@ -5,7 +5,7 @@ const Table = require("cli-table3");
 const colors = {
     menu: "\x1b[33m",
     linebreak: "\x1b[32m",
-    prompt: "\x1b[45m", 
+    prompt: "\x1b[45m",
     reset: "\x1b[0m",
 };
 
@@ -15,6 +15,8 @@ const rl = readline.createInterface({
 });
 
 const bl = colors.linebreak + "=".repeat(200) + colors.reset;
+
+let activeUserIndex = 0;
 
 async function ask(q) {
     return new Promise((r) => rl.question(q, r));
@@ -314,6 +316,44 @@ async function getTransactionDetails() {
     }
 }
 
+async function changeActiveUser() {
+    const signers = await hre.ethers.getSigners();
+
+    const table = createTable(["Index", "Address"], [10, 65]);
+    signers.forEach((s, i) => table.push([i, s.address]));
+
+    console.log("\nAvailable EOAs:");
+    console.log(table.toString());
+
+    const idx = parseInt(await ask("Select User Index: "));
+    if (idx >= 0 && idx < signers.length) activeUserIndex = idx;
+
+    console.log(`\nActive EOA Switched to Index ${activeUserIndex}`);
+}
+
+async function getCurrentUserDetails() {
+    console.log("\nCurrent User Details:");
+    try {
+        const accounts = await hre.ethers.getSigners();
+        const user = accounts[activeUserIndex];
+
+        const address = await user.getAddress();
+        const balance = await hre.ethers.provider.getBalance(address);
+
+        const table = createKeyValueTable("User Property");
+        table.push(
+            ["User Index", activeUserIndex],
+            ["Address", address],
+            ["Balance (wei)", balance.toString()],
+            ["Balance (ETH)", hre.ethers.formatEther(balance)]
+        );
+
+        console.log(table.toString());
+    } catch (err) {
+        console.error("Error:", err.message);
+    }
+}
+
 async function main() {
     console.log(bl);
     console.log(bl);
@@ -332,6 +372,8 @@ async function main() {
     console.log(
         `${colors.menu}5. Get Transaction Details (with pagination)${colors.reset}`
     );
+    console.log(`${colors.menu}6. Change Active User${colors.reset}`);
+    console.log(`${colors.menu}7. Get Current User Details${colors.reset}`);
     console.log(`${colors.menu}0. Exit${colors.reset}`);
 
     const choice = await ask(`${colors.prompt}Select Option: ${colors.reset}`);
@@ -353,6 +395,12 @@ async function main() {
                 break;
             case "5":
                 await getTransactionDetails();
+                break;
+            case "6":
+                await changeActiveUser();
+                break;
+            case "7":
+                await getCurrentUserDetails();
                 break;
             default:
                 console.log("\nExiting Application.");
