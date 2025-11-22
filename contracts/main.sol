@@ -6,8 +6,16 @@ contract InstituteRecruitment {
     string[] public roleTypes = ["Faculty", "Staff", "Applicant"];
     string[] public deptTypes = ["Academics", "HumanResources"];
     string[] public departments = ["ComputerScience", "DataScienceandArtificialIntelligence", "Electrical", "Mechanical", "Mechatronics", "HumanResource"];
-    string[] public vacancyStatuses = ["Requested", "DeptHeadApproved", "HRApproved", "Posted", "Filled"];
+    string[] public vacancyStatuses = ["Requested", "DeptHeadApproved", "HRPosted", "Filled"];
     string[] public applicationStatuses = ["Applied", "Verified", "Selected", "Rejected"];
+
+    // Arrays to make mappings iterable
+    address[] public memberAddresses;
+    uint[] public vacancyIDs;
+    address[] public applicantAddresses;
+    mapping(address => Member) public members;
+    mapping(uint => Vacancy) public vacancies;
+    mapping(address => Applicant[]) public applications;
 
     struct Member {
         address ID;
@@ -31,50 +39,20 @@ contract InstituteRecruitment {
         address deptHeadApprovedBy;
         address hrApprovedBy;
         address postedBy;
-        address filledBy; 
+        address filledBy;
     }
 
     struct Applicant {
         address applicantID;
         uint vacancyID;
         string status;
-    }    
-    
-    struct Certificate {
-        address issuer;       // who issued (CBSE)
-        string rollNo;        // student roll number
-        uint256 issueDate;    // timestamp
-        bool revoked;         // revocation flag
     }
 
-    mapping(address => Member) public members;
-    mapping(uint => Vacancy) public vacancies;
-    mapping(address => Applicant[]) public applications;
-    mapping(bytes32 => Certificate) public certificates;  // fileHash => cert data
-
-    // events and modifiers
-    event CertificateIssued(bytes32 indexed fileHash, string rollNo, address issuer);
-    event CertificateRevoked(bytes32 indexed fileHash, address issuer);
-
-    modifier onlyIssuer(bytes32 fileHash) {
-        require(certificates[fileHash].issuer == msg.sender, "Not certificate issuer");
-        _;
-    }
-
-    // -----------------------------------------------------------------------
-    // MEMBER CHECK
-    // -----------------------------------------------------------------------
     function checkMember(address _ID) public view returns (bool) {
-        return bytes(members[_ID].Name).length > 0;
+        return members[_ID].ID != address(0);
     }
 
-    function addMember(
-        string memory _Name,
-        string memory _Role,
-        string memory _DeptType,
-        string memory _Dept,
-        bool _isHead
-    ) public {
+    function addMember(string memory _Name, string memory _Role, string memory _DeptType, string memory _Dept, bool _isHead) public {
         require(isValidRole(_Role), "Invalid Role");
         require(isValidDeptType(_DeptType), "Invalid DeptType");
         require(isValidDept(_Dept), "Invalid Dept");
@@ -87,22 +65,21 @@ contract InstituteRecruitment {
             Dept: _Dept,
             isHead: _isHead
         });
+
+        memberAddresses.push(msg.sender);  
     }
 
-    // -----------------------------------------------------------------------
-    // VACANCY REQUEST
-    // -----------------------------------------------------------------------
-    function requestVacancy(
-        uint _VacancyID,
-        string memory _Role,
-        string memory _DeptType,
-        string memory _Dept,
-        string memory _Description,
-        string memory _Requirements
-    ) public {
+    function getAllMembers() public view returns (Member[] memory) {
+        Member[] memory allMembers = new Member[](memberAddresses.length);
+        for (uint i = 0; i < memberAddresses.length; i++) {
+            allMembers[i] = members[memberAddresses[i]];
+        }
+        return allMembers;
+    }
+
+    function requestVacancy(uint _VacancyID, string memory _Role, string memory _DeptType, string memory _Dept, string memory _Description, string memory _Requirements) public {
         require(vacancies[_VacancyID].VacancyID == 0, "Vacancy Already Exists");
         require(checkMember(msg.sender), "Only Members Can Request Vacancies");
-
         require(
             keccak256(bytes(members[msg.sender].Role)) == keccak256(bytes("Staff")) ||
             keccak256(bytes(members[msg.sender].Role)) == keccak256(bytes("Faculty")),
@@ -114,7 +91,6 @@ contract InstituteRecruitment {
         require(isValidDept(_Dept), "Invalid Dept");
 
         Vacancy storage v = vacancies[_VacancyID];
-
         v.VacancyID = _VacancyID;
         v.Role = _Role;
         v.DeptType = _DeptType;
@@ -123,64 +99,25 @@ contract InstituteRecruitment {
         v.Requirements = _Requirements;
         v.requestedBy = msg.sender;
         v.status = "Requested";
+
+        vacancyIDs.push(_VacancyID);
     }
 
-    // -----------------------------------------------------------------------
-    // STATUS VIEW
-    // -----------------------------------------------------------------------
-    function getVacancyStatus(uint _VacancyID) public view returns (string memory) {
-        require(checkMember(msg.sender), "Only Members Allowed");
-        require(
-            keccak256(bytes(members[msg.sender].Role)) == keccak256(bytes("Staff")) ||
-            keccak256(bytes(members[msg.sender].Role)) == keccak256(bytes("Faculty")),
-            "Only Faculty Or Staff Allowed"
-        );
 
-        return vacancies[_VacancyID].status;
-    }
-
-    // -----------------------------------------------------------------------
-    // DEPT HEAD APPROVAL
-    // -----------------------------------------------------------------------
-    function getVacanciesRequiringDepartmentHeadApproval()
-        public
-        view
-        returns (uint[] memory)
-    {
-        require(checkMember(msg.sender), "Only Members Allowed");
-        require(members[msg.sender].isHead, "Only Department Heads Allowed");
-
-        uint count = 0;
-        for (uint i = 0; i < 10000; i++) {
-            if (
-                vacancies[i].VacancyID != 0 &&
-                keccak256(bytes(vacancies[i].status)) == keccak256(bytes("Requested")) &&
-                keccak256(bytes(vacancies[i].DeptType)) == keccak256(bytes(members[msg.sender].DeptType))
-            ) count++;
+    function getAllVacancies() public view returns (Vacancy[] memory) {
+        Vacancy[] memory allVacancies = new Vacancy[](vacancyIDs.length);
+        for (uint i = 0; i < vacancyIDs.length; i++) {
+            allVacancies[i] = vacancies[vacancyIDs[i]];
         }
-
-        uint[] memory results = new uint[](count);
-        uint idx = 0;
-
-        for (uint i = 0; i < 10000; i++) {
-            if (
-                vacancies[i].VacancyID != 0 &&
-                keccak256(bytes(vacancies[i].status)) == keccak256(bytes("Requested")) &&
-                keccak256(bytes(vacancies[i].DeptType)) == keccak256(bytes(members[msg.sender].DeptType))
-            ) {
-                results[idx++] = i;
-            }
-        }
-
-        return results;
+        return allVacancies;
     }
 
+    // Department Head Approval
     function approveVacancybyDepartmentHead(uint _VacancyID) public {
         require(checkMember(msg.sender), "Only Members Allowed");
         require(members[msg.sender].isHead, "Only Department Head Can Approve");
 
         Vacancy storage v = vacancies[_VacancyID];
-
         require(v.VacancyID != 0, "Vacancy Does Not Exist");
         require(
             keccak256(bytes(v.status)) == keccak256(bytes("Requested")),
@@ -195,144 +132,153 @@ contract InstituteRecruitment {
         v.deptHeadApprovedBy = msg.sender;
     }
 
-    // -----------------------------------------------------------------------
-    // UNIMPLEMENTED FUNCTIONS FIXED TO REVERT SAFELY
-    // -----------------------------------------------------------------------
-    // HR approval
-    function getVacanciesRequiringHRApproval() 
-        public 
-        view 
-        returns (uint[] memory) 
-    {
-        /*
-            INPUT:
-                none
+    // HR Approval
+    function approveAndPostVacancybyHR(uint _VacancyID) public {
+        require(checkMember(msg.sender), "Only Members Allowed");
+        require(keccak256(bytes(members[msg.sender].DeptType)) == keccak256(bytes("HumanResources")), "Only HR Can Approve");
 
-            OUTPUT:
-                uint[] -> list of vacancy IDs where:
-                    status == "DeptHeadApproved"
-        */
-        revert("Not implemented");
+        Vacancy storage v = vacancies[_VacancyID];
+        require(v.VacancyID != 0, "Vacancy Does Not Exist");
+        require(
+            keccak256(bytes(v.status)) == keccak256(bytes("DeptHeadApproved")),
+            "Vacancy Not Approved by Dept Head"
+        );
+
+        v.status = "HRPosted";
+        v.postedBy = msg.sender;
     }
 
-    function approveVacancybyHR(uint _VacancyID) public {
-        /*
-            INPUT:
-                _VacancyID -> must exist, must be in "DeptHeadApproved" stage
+    // Applicants view vacancies
+    function getVacanciesforApplicants() public view returns (uint[] memory) {
+        uint count = 0;
+        for (uint i = 0; i < vacancyIDs.length; i++) {
+            if (keccak256(bytes(vacancies[vacancyIDs[i]].status)) == keccak256(bytes("HRPosted"))) {
+                count++;
+            }
+        }
 
-            OUTPUT:
-                none
-                (side-effect) vacancy.status = "HRApproved"
-                (side-effect) vacancy.hrApprovedBy = msg.sender
-        */
-        revert("Not implemented");
+        uint[] memory result = new uint[](count);
+        uint idx = 0;
+        for (uint i = 0; i < vacancyIDs.length; i++) {
+            if (keccak256(bytes(vacancies[vacancyIDs[i]].status)) == keccak256(bytes("HRPosted"))) {
+                result[idx++] = vacancyIDs[i];
+            }
+        }
+
+        return result;
     }
 
-    // Applicants view vacancies and apply
-    function getVacanciesforApplicants() 
-        public 
-        view 
-        returns (uint[] memory) 
-    {
-        /*
-            INPUT:
-                none
+    // Apply for Vacancy
+    function applyforVacancy(uint _VacancyID) public {
+        require(checkMember(msg.sender), "Only Members Allowed");
+        require(keccak256(bytes(members[msg.sender].Role)) == keccak256(bytes("Applicant")), "Only Applicants Can Apply");
 
-            OUTPUT:
-                uint[] -> list of vacancy IDs where:
-                    status == "Posted"
-        */
-        revert("Not implemented");
+        Vacancy storage v = vacancies[_VacancyID];
+        require(v.VacancyID != 0, "Vacancy Does Not Exist");
+        require(
+            keccak256(bytes(v.status)) == keccak256(bytes("HRPosted")),
+            "Vacancy Not Posted"
+        );
+
+        v.applicants.push(msg.sender);
+        applications[msg.sender].push(Applicant(msg.sender, _VacancyID, "Applied"));
+        applicantAddresses.push(msg.sender);
     }
 
-    function applyforVacancyasApplicant(uint _VacancyID) public {
-        /*
-            INPUT:
-                _VacancyID -> must exist, must be "Posted"
-                msg.sender -> must be a registered Applicant
+    // HR selects applicant and fills vacancy
+    function selectApplicantbyHR(uint _VacancyID, address _applicant) public {
+        require(checkMember(msg.sender), "Only Members Allowed");
+        require(keccak256(bytes(members[msg.sender].Role)) == keccak256(bytes("HumanResources")), "Only HR Can Select");
 
-            OUTPUT:
-                none
-                (side-effect) adds msg.sender to vacancy.applicants
-                (side-effect) adds Applicant struct {id, vacancyID, "Applied"}
-        */
-        revert("Not implemented");
+        Vacancy storage v = vacancies[_VacancyID];
+        require(v.VacancyID != 0, "Vacancy Does Not Exist");
+        require(keccak256(bytes(v.status)) == keccak256(bytes("HRPosted")), "Vacancy Not Posted");
+
+        bool applicantFound = false;
+        for (uint i = 0; i < v.applicants.length; i++) {
+            if (v.applicants[i] == _applicant) {
+                applicantFound = true;
+                break;
+            }
+        }
+
+        require(applicantFound, "Applicant did not apply for this vacancy");
+
+        // Mark applicant as "Selected" and vacancy as "Filled"
+        for (uint i = 0; i < applications[_applicant].length; i++) {
+            if (applications[_applicant][i].vacancyID == _VacancyID) {
+                applications[_applicant][i].status = "Selected";
+            }
+        }
+
+        v.status = "Filled";
+        v.filledBy = _applicant;
     }
 
-    function checkApplicationStatusbyApplicant(uint _VacancyID) 
-        public 
-        view 
-        returns (string memory) 
-    {
-        /*
-            INPUT:
-                _VacancyID
-                msg.sender -> applicant
+    // Function to return the list of vacancies requiring department head approval
+    function getVacanciesRequiringDepartmentHeadApproval() public view returns (uint[] memory) {
+        uint[] memory pendingVacancies = new uint[](vacancyIDs.length);
+        uint count = 0;
 
-            OUTPUT:
-                string -> "Applied" / "Verified" / "Selected" / "Rejected"
-        */
-        revert("Not implemented");
+        for (uint i = 0; i < vacancyIDs.length; i++) {
+            Vacancy storage v = vacancies[vacancyIDs[i]];
+            if (keccak256(bytes(v.status)) == keccak256(bytes("Requested"))) {
+                pendingVacancies[count] = v.VacancyID;
+                count++;
+            }
+        }
+
+        uint[] memory result = new uint[](count);
+        for (uint i = 0; i < count; i++) {
+            result[i] = pendingVacancies[i];
+        }
+
+        return result;
     }
 
-    // HR → CA verification
-    function requestforApplicantVerificationbyHR(
-        uint _VacancyID,
-        address _applicant
-    ) public {
-        /*
-            INPUT:
-                _VacancyID -> must exist, must be "HRApproved"
-                _applicant -> must have applied for this vacancy
-                msg.sender -> must be HR
+    // Function to return the list of vacancies requiring HR approval
+    function getVacanciesRequiringHRApproval() public view returns (uint[] memory) {
+        uint[] memory pendingVacancies = new uint[](vacancyIDs.length);
+        uint count = 0;
 
-            OUTPUT:
-                none
-                (side-effect) marks applicant as "Applied" but awaiting CA verification
-        */
-        revert("Not implemented");
+        for (uint i = 0; i < vacancyIDs.length; i++) {
+            Vacancy storage v = vacancies[vacancyIDs[i]];
+            if (keccak256(bytes(v.status)) == keccak256(bytes("DeptHeadApproved"))) {
+                pendingVacancies[count] = v.VacancyID;
+                count++;
+            }
+        }
+
+        uint[] memory result = new uint[](count);
+        for (uint i = 0; i < count; i++) {
+            result[i] = pendingVacancies[i];
+        }
+
+        return result;
     }
 
-    function verifyApplicantbyCA(
-        uint _VacancyID, 
-        address _applicant
-    ) public {
-        /*
-            INPUT:
-                _VacancyID
-                _applicant -> must be requested by HR for verification
-                msg.sender -> must be CA
+    // Function to check the application status for an applicant for a specific vacancy
+    function checkApplicationStatusbyApplicant(uint _VacancyID) public view returns (string memory) {
+        require(checkMember(msg.sender), "Only Members Allowed");
 
-            OUTPUT:
-                none
-                (side-effect) updates applicant.status = "Verified"
-        */
-        revert("Not implemented");
+        bool applicantFound = false;
+        string memory status;
+
+        // Loop through the applicant's applications to find the specific vacancy
+        for (uint i = 0; i < applications[msg.sender].length; i++) {
+            if (applications[msg.sender][i].vacancyID == _VacancyID) {
+                applicantFound = true;
+                status = applications[msg.sender][i].status;
+                break;
+            }
+        }
+
+        require(applicantFound, "You have not applied for this vacancy");
+
+        return status;
     }
 
-    // HR selects → Vacancy filled
-    function selectApplicantbyHRandFillVacancy(
-        uint _VacancyID,
-        address _applicant
-    ) public {
-        /*
-            INPUT:
-                _VacancyID
-                _applicant -> must be Verified
-                msg.sender -> must be HR
-
-            OUTPUT:
-                none
-                (side-effect) applicant.status = "Selected"
-                (side-effect) vacancy.status = "Filled"
-                (side-effect) vacancy.filledBy = msg.sender
-        */
-        revert("Not implemented");
-    }
-
-    // -----------------------------------------------------------------------
-    // VALIDATION HELPERS
-    // -----------------------------------------------------------------------
+    // Validation helpers
     function isValidRole(string memory _role) internal view returns (bool) {
         for (uint i = 0; i < roleTypes.length; i++) {
             if (keccak256(bytes(_role)) == keccak256(bytes(roleTypes[i]))) return true;
@@ -352,28 +298,5 @@ contract InstituteRecruitment {
             if (keccak256(bytes(_dept)) == keccak256(bytes(departments[i]))) return true;
         }
         return false;
-    }
-
-    // validate applicant
-    // Issue new certificate
-    function issueCertificate(bytes32 fileHash, string memory rollNo) public {
-        require(certificates[fileHash].issuer == address(0), "Already issued");
-        certificates[fileHash] = Certificate(msg.sender, rollNo, block.timestamp, false);
-        emit CertificateIssued(fileHash, rollNo, msg.sender);
-    }
-
-    // Revoke an existing certificate
-    function revokeCertificate(bytes32 fileHash) public onlyIssuer(fileHash) {
-        certificates[fileHash].revoked = true;
-        emit CertificateRevoked(fileHash, msg.sender);
-    }
-
-    // Verify certificate validity (✅ ON-CHAIN verification)
-    function verifyCertificate(bytes32 fileHash) public view returns (bool valid, address issuer, string memory rollNo) {
-        Certificate memory c = certificates[fileHash];
-        if (c.issuer == address(0) || c.revoked) {
-            return (false, address(0), "");
-        }
-        return (true, c.issuer, c.rollNo);
     }
 }
