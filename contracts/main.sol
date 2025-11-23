@@ -4,10 +4,10 @@ pragma solidity ^0.8.20;
 contract InstituteRecruitment {
 
     string[] public roleTypes = ["Faculty", "Staff", "Applicant"];
-    string[] public deptTypes = ["Academics", "HumanResources"];
-    string[] public departments = ["ComputerScience", "DataScienceandArtificialIntelligence", "Electrical", "Mechanical", "Mechatronics", "HumanResource"];
-    string[] public vacancyStatuses = ["Requested", "DeptHeadApproved", "HRPosted", "Filled"];
-    string[] public applicationStatuses = ["Applied", "Verified", "Selected", "Rejected"];
+    string[] public deptTypes = ["Academics", "Human-Resources", "Certifying-Authority"];
+    string[] public departments = ["Computer-Science", "Data-Science-and-Artificial-Intelligence", "Electrical", "Mechanical", "Mechatronics", "Null"];
+    string[] public vacancyStatuses = ["Requested", "Dept-Head-Approved", "HR-Posted", "Filled"];
+    string[] public applicationStatuses = ["Applied", "Failed-Verification", "Verified", "Selected", "Rejected"];
 
     address[] public memberAddresses;
     uint[] public vacancyIDs;
@@ -152,7 +152,7 @@ contract InstituteRecruitment {
             "Dept Head Cannot Approve Other DeptType"
         );
 
-        v.status = "DeptHeadApproved";
+        v.status = "Dept-Head-Approved";
         v.deptHeadApprovedBy = msg.sender;
     }
 
@@ -165,7 +165,7 @@ contract InstituteRecruitment {
 
         for (uint i = 0; i < vacancyIDs.length; i++) {
             Vacancy storage v = vacancies[vacancyIDs[i]];
-            if (keccak256(bytes(v.status)) == keccak256(bytes("DeptHeadApproved"))) {
+            if (keccak256(bytes(v.status)) == keccak256(bytes("Dept-Head-Approved"))) {
                 pendingVacancies[count] = v.VacancyID;
                 count++;
             }
@@ -184,16 +184,16 @@ contract InstituteRecruitment {
     /* -------------------------------------------------------------------------- */
     function approveAndPostVacancybyHR(uint _VacancyID) public {
         require(checkMember(msg.sender), "Only Members Allowed");
-        require(keccak256(bytes(members[msg.sender].DeptType)) == keccak256(bytes("HumanResources")), "Only HR Can Approve");
+        require(keccak256(bytes(members[msg.sender].DeptType)) == keccak256(bytes("Human-Resources")), "Only HR Can Approve");
 
         Vacancy storage v = vacancies[_VacancyID];
         require(v.VacancyID != 0, "Vacancy Does Not Exist");
         require(
-            keccak256(bytes(v.status)) == keccak256(bytes("DeptHeadApproved")),
+            keccak256(bytes(v.status)) == keccak256(bytes("Dept-Head-Approved")),
             "Vacancy Not Approved by Dept Head"
         );
 
-        v.status = "HRPosted";
+        v.status = "HR-Posted";
         v.postedBy = msg.sender;
     }
 
@@ -202,11 +202,11 @@ contract InstituteRecruitment {
     /* -------------------------------------------------------------------------- */
     function selectApplicantbyHR(uint _VacancyID, address _applicant) public {
         require(checkMember(msg.sender), "Only Members Allowed");
-        require(keccak256(bytes(members[msg.sender].DeptType)) == keccak256(bytes("HumanResources")), "Only HR Can Select");
+        require(keccak256(bytes(members[msg.sender].DeptType)) == keccak256(bytes("Human-Resources")), "Only HR Can Select");
 
         Vacancy storage v = vacancies[_VacancyID];
         require(v.VacancyID != 0, "Vacancy Does Not Exist");
-        require(keccak256(bytes(v.status)) == keccak256(bytes("HRPosted")), "Vacancy Not Posted");
+        require(keccak256(bytes(v.status)) == keccak256(bytes("HR-Posted")), "Vacancy Not Posted");
 
         bool applicantFound = false;
         for (uint i = 0; i < v.applicants.length; i++) {
@@ -260,7 +260,7 @@ contract InstituteRecruitment {
         Vacancy storage v = vacancies[_VacancyID];
         require(v.VacancyID != 0, "Vacancy Does Not Exist");
         require(
-            keccak256(bytes(v.status)) == keccak256(bytes("HRPosted")),
+            keccak256(bytes(v.status)) == keccak256(bytes("HR-Posted")),
             "Vacancy Not Posted"
         );
 

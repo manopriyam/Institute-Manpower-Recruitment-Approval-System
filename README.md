@@ -100,3 +100,9 @@ Add your environment variables to `.env` file.
     npx hardhat run scripts/main.js --network iitbhilaiBlockchain
     ```
 
+
+
+## Project Flow Charts
+
+![Chart_1](assets/Chart_1.png)
+![Chart_2](assets/Chart_2.png)

@@ -93,12 +93,11 @@ async function viewMember() {
 async function autoAssignMembers() {
     const signers = await hre.ethers.getSigners();
     const departments = [
-        "ComputerScience",
-        "DataScienceandArtificialIntelligence",
+        "Computer-Science",
+        "Data-Science-and-Artificial-Intelligence",
         "Electrical",
         "Mechanical",
         "Mechatronics",
-        "HumanResource",
     ];
 
     console.log(
@@ -107,7 +106,7 @@ async function autoAssignMembers() {
 
     for (let i = 0; i < signers.length; i++) {
         const s = signers[i];
-        let dept = departments[i % 5];
+        let dept = departments[i % departments.length];
         let role, deptType, isHead;
 
         if (i < 5) {
@@ -122,14 +121,19 @@ async function autoAssignMembers() {
             role = "Faculty";
             deptType = "Academics";
             isHead = true;
-        } else if (i < 19) {
+        } else if (i < 18) {
             role = "Applicant";
             deptType = "Academics";
             isHead = false;
+        } else if (i === 18) {
+            role = "Staff";
+            deptType = "Certifying-Authority";
+            dept = "Null";
+            isHead = false;
         } else {
             role = "Staff";
-            deptType = "HumanResources";
-            dept = "HumanResource";
+            deptType = "Human-Resources";
+            dept = "Null";
             isHead = false;
         }
 
@@ -307,7 +311,7 @@ async function simulate(contract) {
         vacancyID: 12,
         role: await contract.roleTypes(1),
         deptType: "Academics",
-        dept: "ComputerScience",
+        dept: "Computer-Science",
         description: "Some-Random-Description",
         requirements: "Some-Random-Requirements",
     };
