@@ -52,7 +52,7 @@ cp .env.example .env
 ```
 Add your environment variables to `.env` file.
 
-### 5. Checking Setup by Deploying `HelloWorld.js`
+### 5. Checking Setup by Deploying `HelloWorld.sol` using `HelloWorld.js`
 
 - #### Local Blockchain Network (Hardhat)
 
@@ -75,3 +75,28 @@ Add your environment variables to `.env` file.
     ```
     npx hardhat run scripts/HelloWorld.js --network iitbhilaiBlockchain
     ```
+
+### 6. Running Source Code by Deploying and Interacting with `main.sol` through `main.js`
+
+- #### Local Blockchain Network (Hardhat)
+
+    - Terminal 1 — Start Hardhat Node
+
+        ```
+        npx hardhat node
+        ```
+
+    - Terminal 2 — Deploy to Localhost
+
+        ```
+        npx hardhat run scripts/main.js --network localhost
+        ```
+
+        If successful, Terminal 1 will display mined block details.
+
+- #### Institute Blockchain Network (IITBHILAIBLOCKCHAIN)
+
+    ```
+    npx hardhat run scripts/main.js --network iitbhilaiBlockchain
+    ```
+

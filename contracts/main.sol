@@ -9,7 +9,6 @@ contract InstituteRecruitment {
     string[] public vacancyStatuses = ["Requested", "DeptHeadApproved", "HRPosted", "Filled"];
     string[] public applicationStatuses = ["Applied", "Verified", "Selected", "Rejected"];
 
-    // Arrays to make mappings iterable
     address[] public memberAddresses;
     uint[] public vacancyIDs;
     address[] public applicantAddresses;
@@ -48,10 +47,9 @@ contract InstituteRecruitment {
         string status;
     }
 
-    function checkMember(address _ID) public view returns (bool) {
-        return members[_ID].ID != address(0);
-    }
-
+    /* -------------------------------------------------------------------------- */
+    /*                               ADD MEMBER                                    */
+    /* -------------------------------------------------------------------------- */
     function addMember(string memory _Name, string memory _Role, string memory _DeptType, string memory _Dept, bool _isHead) public {
         require(isValidRole(_Role), "Invalid Role");
         require(isValidDeptType(_DeptType), "Invalid DeptType");
@@ -69,6 +67,13 @@ contract InstituteRecruitment {
         memberAddresses.push(msg.sender);  
     }
 
+    /* -------------------------------------------------------------------------- */
+    /*                          VIEW MEMBER DETAILS                                */
+    /* -------------------------------------------------------------------------- */
+    function checkMember(address _ID) public view returns (bool) {
+        return members[_ID].ID != address(0);
+    }
+
     function getAllMembers() public view returns (Member[] memory) {
         Member[] memory allMembers = new Member[](memberAddresses.length);
         for (uint i = 0; i < memberAddresses.length; i++) {
@@ -77,6 +82,9 @@ contract InstituteRecruitment {
         return allMembers;
     }
 
+    /* -------------------------------------------------------------------------- */
+    /*                          REQUEST VACANCY                                   */
+    /* -------------------------------------------------------------------------- */
     function requestVacancy(uint _VacancyID, string memory _Role, string memory _DeptType, string memory _Dept, string memory _Description, string memory _Requirements) public {
         require(vacancies[_VacancyID].VacancyID == 0, "Vacancy Already Exists");
         require(checkMember(msg.sender), "Only Members Can Request Vacancies");
@@ -103,119 +111,9 @@ contract InstituteRecruitment {
         vacancyIDs.push(_VacancyID);
     }
 
-
-    function getAllVacancies() public view returns (Vacancy[] memory) {
-        Vacancy[] memory allVacancies = new Vacancy[](vacancyIDs.length);
-        for (uint i = 0; i < vacancyIDs.length; i++) {
-            allVacancies[i] = vacancies[vacancyIDs[i]];
-        }
-        return allVacancies;
-    }
-
-    // Department Head Approval
-    function approveVacancybyDepartmentHead(uint _VacancyID) public {
-        require(checkMember(msg.sender), "Only Members Allowed");
-        require(members[msg.sender].isHead, "Only Department Head Can Approve");
-
-        Vacancy storage v = vacancies[_VacancyID];
-        require(v.VacancyID != 0, "Vacancy Does Not Exist");
-        require(
-            keccak256(bytes(v.status)) == keccak256(bytes("Requested")),
-            "Vacancy Not In Requested Stage"
-        );
-        require(
-            keccak256(bytes(v.DeptType)) == keccak256(bytes(members[msg.sender].DeptType)),
-            "Dept Head Cannot Approve Other DeptType"
-        );
-
-        v.status = "DeptHeadApproved";
-        v.deptHeadApprovedBy = msg.sender;
-    }
-
-    // HR Approval
-    function approveAndPostVacancybyHR(uint _VacancyID) public {
-        require(checkMember(msg.sender), "Only Members Allowed");
-        require(keccak256(bytes(members[msg.sender].DeptType)) == keccak256(bytes("HumanResources")), "Only HR Can Approve");
-
-        Vacancy storage v = vacancies[_VacancyID];
-        require(v.VacancyID != 0, "Vacancy Does Not Exist");
-        require(
-            keccak256(bytes(v.status)) == keccak256(bytes("DeptHeadApproved")),
-            "Vacancy Not Approved by Dept Head"
-        );
-
-        v.status = "HRPosted";
-        v.postedBy = msg.sender;
-    }
-
-    // Applicants view vacancies
-    function getVacanciesforApplicants() public view returns (uint[] memory) {
-        uint count = 0;
-        for (uint i = 0; i < vacancyIDs.length; i++) {
-            if (keccak256(bytes(vacancies[vacancyIDs[i]].status)) == keccak256(bytes("HRPosted"))) {
-                count++;
-            }
-        }
-
-        uint[] memory result = new uint[](count);
-        uint idx = 0;
-        for (uint i = 0; i < vacancyIDs.length; i++) {
-            if (keccak256(bytes(vacancies[vacancyIDs[i]].status)) == keccak256(bytes("HRPosted"))) {
-                result[idx++] = vacancyIDs[i];
-            }
-        }
-
-        return result;
-    }
-
-    // Apply for Vacancy
-    function applyforVacancy(uint _VacancyID) public {
-        require(checkMember(msg.sender), "Only Members Allowed");
-        require(keccak256(bytes(members[msg.sender].Role)) == keccak256(bytes("Applicant")), "Only Applicants Can Apply");
-
-        Vacancy storage v = vacancies[_VacancyID];
-        require(v.VacancyID != 0, "Vacancy Does Not Exist");
-        require(
-            keccak256(bytes(v.status)) == keccak256(bytes("HRPosted")),
-            "Vacancy Not Posted"
-        );
-
-        v.applicants.push(msg.sender);
-        applications[msg.sender].push(Applicant(msg.sender, _VacancyID, "Applied"));
-        applicantAddresses.push(msg.sender);
-    }
-
-    // HR selects applicant and fills vacancy
-    function selectApplicantbyHR(uint _VacancyID, address _applicant) public {
-        require(checkMember(msg.sender), "Only Members Allowed");
-        require(keccak256(bytes(members[msg.sender].Role)) == keccak256(bytes("HumanResources")), "Only HR Can Select");
-
-        Vacancy storage v = vacancies[_VacancyID];
-        require(v.VacancyID != 0, "Vacancy Does Not Exist");
-        require(keccak256(bytes(v.status)) == keccak256(bytes("HRPosted")), "Vacancy Not Posted");
-
-        bool applicantFound = false;
-        for (uint i = 0; i < v.applicants.length; i++) {
-            if (v.applicants[i] == _applicant) {
-                applicantFound = true;
-                break;
-            }
-        }
-
-        require(applicantFound, "Applicant did not apply for this vacancy");
-
-        // Mark applicant as "Selected" and vacancy as "Filled"
-        for (uint i = 0; i < applications[_applicant].length; i++) {
-            if (applications[_applicant][i].vacancyID == _VacancyID) {
-                applications[_applicant][i].status = "Selected";
-            }
-        }
-
-        v.status = "Filled";
-        v.filledBy = _applicant;
-    }
-
-    // Function to return the list of vacancies requiring department head approval
+    /* -------------------------------------------------------------------------- */
+    /*          VIEW VACANCIES REQUIRING DEPT HEAD APPROVAL                        */
+    /* -------------------------------------------------------------------------- */
     function getVacanciesRequiringDepartmentHeadApproval() public view returns (uint[] memory) {
         uint[] memory pendingVacancies = new uint[](vacancyIDs.length);
         uint count = 0;
@@ -236,7 +134,31 @@ contract InstituteRecruitment {
         return result;
     }
 
-    // Function to return the list of vacancies requiring HR approval
+    /* -------------------------------------------------------------------------- */
+    /*                          APPROVE VACANCY BY DEPT HEAD                      */
+    /* -------------------------------------------------------------------------- */
+    function approveVacancybyDepartmentHead(uint _VacancyID) public {
+        require(checkMember(msg.sender), "Only Members Allowed");
+        require(members[msg.sender].isHead, "Only Department Head Can Approve");
+
+        Vacancy storage v = vacancies[_VacancyID];
+        require(v.VacancyID != 0, "Vacancy Does Not Exist");
+        require(
+            keccak256(bytes(v.status)) == keccak256(bytes("Requested")),
+            "Vacancy Not In Requested Stage"
+        );
+        require(
+            keccak256(bytes(v.DeptType)) == keccak256(bytes(members[msg.sender].DeptType)),
+            "Dept Head Cannot Approve Other DeptType"
+        );
+
+        v.status = "DeptHeadApproved";
+        v.deptHeadApprovedBy = msg.sender;
+    }
+
+    /* -------------------------------------------------------------------------- */
+    /*          VIEW VACANCIES REQUIRING HR APPROVAL                               */
+    /* -------------------------------------------------------------------------- */
     function getVacanciesRequiringHRApproval() public view returns (uint[] memory) {
         uint[] memory pendingVacancies = new uint[](vacancyIDs.length);
         uint count = 0;
@@ -257,28 +179,114 @@ contract InstituteRecruitment {
         return result;
     }
 
-    // Function to check the application status for an applicant for a specific vacancy
-    function checkApplicationStatusbyApplicant(uint _VacancyID) public view returns (string memory) {
+    /* -------------------------------------------------------------------------- */
+    /*                  APPROVE AND POST VACANCY BY HR                            */
+    /* -------------------------------------------------------------------------- */
+    function approveAndPostVacancybyHR(uint _VacancyID) public {
         require(checkMember(msg.sender), "Only Members Allowed");
+        require(keccak256(bytes(members[msg.sender].DeptType)) == keccak256(bytes("HumanResources")), "Only HR Can Approve");
+
+        Vacancy storage v = vacancies[_VacancyID];
+        require(v.VacancyID != 0, "Vacancy Does Not Exist");
+        require(
+            keccak256(bytes(v.status)) == keccak256(bytes("DeptHeadApproved")),
+            "Vacancy Not Approved by Dept Head"
+        );
+
+        v.status = "HRPosted";
+        v.postedBy = msg.sender;
+    }
+
+    /* -------------------------------------------------------------------------- */
+    /*                          SELECT APPLICANT AND FILL VACANCY                 */
+    /* -------------------------------------------------------------------------- */
+    function selectApplicantbyHR(uint _VacancyID, address _applicant) public {
+        require(checkMember(msg.sender), "Only Members Allowed");
+        require(keccak256(bytes(members[msg.sender].DeptType)) == keccak256(bytes("HumanResources")), "Only HR Can Select");
+
+        Vacancy storage v = vacancies[_VacancyID];
+        require(v.VacancyID != 0, "Vacancy Does Not Exist");
+        require(keccak256(bytes(v.status)) == keccak256(bytes("HRPosted")), "Vacancy Not Posted");
 
         bool applicantFound = false;
-        string memory status;
-
-        // Loop through the applicant's applications to find the specific vacancy
-        for (uint i = 0; i < applications[msg.sender].length; i++) {
-            if (applications[msg.sender][i].vacancyID == _VacancyID) {
+        for (uint i = 0; i < v.applicants.length; i++) {
+            if (v.applicants[i] == _applicant) {
                 applicantFound = true;
-                status = applications[msg.sender][i].status;
                 break;
             }
         }
 
-        require(applicantFound, "You have not applied for this vacancy");
+        require(applicantFound, "Applicant did not apply for this vacancy");
 
-        return status;
+        for (uint i = 0; i < applications[_applicant].length; i++) {
+            if (applications[_applicant][i].vacancyID == _VacancyID) {
+                applications[_applicant][i].status = "Selected";
+            }
+        }
+
+        v.status = "Filled";
+        v.filledBy = _applicant;
     }
 
-    // Validation helpers
+    /* -------------------------------------------------------------------------- */
+    /*                  VIEW VACANCIES FOR APPLICANTS                              */
+    /* -------------------------------------------------------------------------- */
+    function getVacanciesforApplicants() public view returns (uint[] memory) {
+        uint count = 0;
+        for (uint i = 0; i < vacancyIDs.length; i++) {
+            if (keccak256(bytes(vacancies[vacancyIDs[i]].status)) == keccak256(bytes("HRPosted"))) {
+                count++;
+            }
+        }
+
+        uint[] memory result = new uint[](count);
+        uint idx = 0;
+        for (uint i = 0; i < vacancyIDs.length; i++) {
+            if (keccak256(bytes(vacancies[vacancyIDs[i]].status)) == keccak256(bytes("HRPosted"))) {
+                result[idx++] = vacancyIDs[i];
+            }
+        }
+
+        return result;
+    }
+
+    /* -------------------------------------------------------------------------- */
+    /*                          APPLY FOR VACANCY                                 */
+    /* -------------------------------------------------------------------------- */
+    function applyforVacancy(uint _VacancyID) public {
+        require(checkMember(msg.sender), "Only Members Allowed");
+        require(keccak256(bytes(members[msg.sender].Role)) == keccak256(bytes("Applicant")), "Only Applicants Can Apply");
+
+        Vacancy storage v = vacancies[_VacancyID];
+        require(v.VacancyID != 0, "Vacancy Does Not Exist");
+        require(
+            keccak256(bytes(v.status)) == keccak256(bytes("HRPosted")),
+            "Vacancy Not Posted"
+        );
+
+        v.applicants.push(msg.sender);
+        applications[msg.sender].push(Applicant(msg.sender, _VacancyID, "Applied"));
+        applicantAddresses.push(msg.sender);
+    }
+
+    /* -------------------------------------------------------------------------- */
+    /*                  CHECK APPLICATION STATUS                                   */
+    /* -------------------------------------------------------------------------- */
+    function checkApplicationStatusbyApplicant(uint _VacancyID) public view returns (string memory) {
+        require(checkMember(msg.sender), "Only Members Allowed");
+
+        for (uint i = 0; i < applications[msg.sender].length; i++) {
+            if (applications[msg.sender][i].vacancyID == _VacancyID) {
+                return applications[msg.sender][i].status;
+            }
+        }
+
+        revert("You have not applied for this vacancy");
+    }
+
+    /* -------------------------------------------------------------------------- */
+    /*                            HELPER FUNCTIONS                                  */
+    /* -------------------------------------------------------------------------- */
     function isValidRole(string memory _role) internal view returns (bool) {
         for (uint i = 0; i < roleTypes.length; i++) {
             if (keccak256(bytes(_role)) == keccak256(bytes(roleTypes[i]))) return true;
@@ -298,5 +306,13 @@ contract InstituteRecruitment {
             if (keccak256(bytes(_dept)) == keccak256(bytes(departments[i]))) return true;
         }
         return false;
+    }
+
+    function getAllVacancies() public view returns (Vacancy[] memory) {
+        Vacancy[] memory allVacancies = new Vacancy[](vacancyIDs.length);
+        for (uint i = 0; i < vacancyIDs.length; i++) {
+            allVacancies[i] = vacancies[vacancyIDs[i]];
+        }
+        return allVacancies;
     }
 }

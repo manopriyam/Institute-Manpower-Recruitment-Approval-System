@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 const hre = require("hardhat");
 const readline = require("readline");
 const Table = require("cli-table3");
@@ -7,6 +8,7 @@ const colors = {
     linebreak: "\x1b[32m",
     prompt: "\x1b[45m",
     reset: "\x1b[0m",
+    logs: "\x1b[36m",
 };
 
 const rl = readline.createInterface({
@@ -14,10 +16,11 @@ const rl = readline.createInterface({
     output: process.stdout,
 });
 
-const bl = colors.linebreak + "=".repeat(200) + colors.reset;
+const bl = colors.linebreak + "\n" + "=".repeat(200) + colors.reset;
 
 let contract;
 let activeUserIndex = 0;
+let activeMember = null;
 
 async function ask(q) {
     return new Promise((r) => rl.question(q, r));
@@ -40,57 +43,52 @@ function createKeyValueTable(title = "Details") {
     });
 }
 
-/* -------------------------------------------------------------------------- */
-/*                          DEPLOY CONTRACT — ETHERS v6                        */
-/* -------------------------------------------------------------------------- */
 async function deployContract() {
     const Factory = await hre.ethers.getContractFactory("InstituteRecruitment");
-    const instance = await Factory.deploy(); // auto-awaits deployment
-
-    console.log("\nContract deployed at:", await instance.getAddress());
+    const instance = await Factory.deploy();
+    console.log(
+        `\n${colors.logs}Contract Deployed At: ${await instance.getAddress()}${
+            colors.reset
+        }`
+    );
     return instance;
 }
 
-/* -------------------------------------------------------------------------- */
-/*                          ADD MEMBER                                         */
-/* -------------------------------------------------------------------------- */
-async function addMember() {
-    const name = await ask("Enter member name: ");
-    const role = await ask("Enter member role (Faculty/Staff/Applicant): ");
-    const deptType = await ask("Enter department type (Academics/HumanResources): ");
-    const dept = await ask("Enter department: ");
-    const isHead = (await ask("Is the member a department head? (yes/no): ")) === "yes";
-
+async function addMember(name, role, deptType, dept, isHead) {
     const signer = (await hre.ethers.getSigners())[activeUserIndex];
-
     await contract
         .connect(signer)
         .addMember(name, role, deptType, dept, isHead);
+    const table = createKeyValueTable("Member Added");
+    table.push(
+        ["Name", name],
+        ["Role", role],
+        ["DeptType", deptType],
+        ["Dept", dept],
+        ["isHead", isHead]
+    );
+    console.log("\n" + table.toString());
 
-    console.log("\nMember added!");
+    activeMember = await contract.members(signer.address);
 }
 
-/* -------------------------------------------------------------------------- */
-/*                          VIEW MEMBER DETAILS                               */
-/* -------------------------------------------------------------------------- */
 async function viewMember() {
     const signer = (await hre.ethers.getSigners())[activeUserIndex];
     const member = await contract.members(signer.address);
+    activeMember = member;
 
-    const t = createKeyValueTable("Active User");
-    t.push(["Address", signer.address]);
-    t.push(["Name", member.Name]);
-    t.push(["Role", member.Role]);
-    t.push(["DeptType", member.DeptType]);
-    t.push(["Dept", member.Dept]);
-    t.push(["isHead", member.isHead]);
-
-    console.log("\n" + t.toString());
+    const table = createKeyValueTable("Active User");
+    table.push(
+        ["Address", signer.address],
+        ["Name", member.Name],
+        ["Role", member.Role],
+        ["DeptType", member.DeptType],
+        ["Dept", member.Dept],
+        ["isHead", member.isHead]
+    );
+    console.log("\n" + table.toString());
+    return member;
 }
-
-/* -------------------------------------------------------------------------- */
-/*                          AUTO ASSIGN MEMBERS                               */
-/* -------------------------------------------------------------------------- */
 
 async function autoAssignMembers() {
     const signers = await hre.ethers.getSigners();
@@ -100,227 +98,433 @@ async function autoAssignMembers() {
         "Electrical",
         "Mechanical",
         "Mechatronics",
+        "HumanResource",
     ];
 
-    console.log("\nAssigning members automatically...\n");
+    console.log(
+        `\n${colors.logs}Assigning Members Automatically${colors.reset}`
+    );
 
     for (let i = 0; i < signers.length; i++) {
         const s = signers[i];
-        const dept = departments[i % departments.length];
+        let dept = departments[i % 5];
+        let role, deptType, isHead;
 
         if (i < 5) {
-            await contract
-                .connect(s)
-                .addMember(`Faculty_${i}`, "Faculty", "Academics", dept, false);
+            role = "Faculty";
+            deptType = "Academics";
+            isHead = false;
         } else if (i < 10) {
-            await contract
-                .connect(s)
-                .addMember(`Staff_${i}`, "Staff", "Academics", dept, false);
+            role = "Staff";
+            deptType = "Academics";
+            isHead = false;
         } else if (i < 15) {
-            await contract
-                .connect(s)
-                .addMember(`Head_${i}`, "Faculty", "Academics", dept, true);
+            role = "Faculty";
+            deptType = "Academics";
+            isHead = true;
         } else if (i < 19) {
-            await contract
-                .connect(s)
-                .addMember(
-                    `Applicant_${i}`,
-                    "Applicant",
-                    "Academics",
-                    dept,
-                    false
-                );
+            role = "Applicant";
+            deptType = "Academics";
+            isHead = false;
         } else {
-            await contract
-                .connect(s)
-                .addMember(
-                    `HR_${i}`,
-                    "Staff",
-                    "HumanResources",
-                    "HumanResource",
-                    false
-                );
-        } 
-    }
+            role = "Staff";
+            deptType = "HumanResources";
+            dept = "HumanResource";
+            isHead = false;
+        }
 
-    console.log("Auto-assignment complete!\n");
+        await contract
+            .connect(s)
+            .addMember(`${role}_${i}`, role, deptType, dept, isHead);
+        console.log(
+            `\n${colors.logs}Assigned ${role}_${i} To ${dept}${colors.reset}`
+        );
+    }
+    console.log(`\n${colors.logs}Auto-Assignment Completed${colors.reset}`);
 }
 
+async function changeActiveUser(idx) {
+    const signers = await hre.ethers.getSigners();
+    if (typeof idx === "number" && idx >= 0 && idx < signers.length) {
+        activeUserIndex = idx;
+        activeMember = await contract.members(signers[idx].address);
+        console.log(
+            `\n${colors.logs}Active User Set To Index ${activeUserIndex}${colors.reset}`
+        );
+        await viewMember();
+        return;
+    }
 
-/* -------------------------------------------------------------------------- */
-/*                          REQUEST VACANCY                                   */
-/* -------------------------------------------------------------------------- */
-async function requestVacancy() {
-    const vacancyID = parseInt(await ask("Enter Vacancy ID: "));
-    const role = await ask("Enter Role Needed: ");
-    const deptType = await ask("Enter DeptType: ");
-    const dept = await ask("Enter Dept: ");
-    const desc = await ask("Enter Description: ");
-    const req = await ask("Enter Requirements: ");
+    const table = createTable(["Index", "Address"]);
+    signers.forEach((s, i) => table.push([i, s.address]));
+    console.log("\nAvailable Users:");
+    console.log("\n" + table.toString());
 
+    const choice = parseInt(
+        await ask(`${colors.prompt}Select User Index: ${colors.reset}`)
+    );
+    if (!isNaN(choice) && choice >= 0 && choice < signers.length) {
+        activeUserIndex = choice;
+        activeMember = await contract.members(signers[choice].address);
+    }
+    console.log(
+        `\n${colors.logs}Active User Set To Index ${activeUserIndex}${colors.reset}`
+    );
+    await viewMember();
+}
+
+async function requestVacancy(vacancyID, role, deptType, dept, desc, req) {
     const signer = (await hre.ethers.getSigners())[activeUserIndex];
+    const member = await contract.members(signer.address);
+    activeMember = member;
+
+    console.log(
+        `\n${colors.logs}${member.Dept} ${member.Role} (${member.Name}) Requesting Vacancy${colors.reset}`
+    );
 
     await contract
         .connect(signer)
         .requestVacancy(vacancyID, role, deptType, dept, desc, req);
 
-    console.log("\nVacancy Requested!");
-}
-
-/* -------------------------------------------------------------------------- */
-/*                          APPROVE VACANCY BY DEPT HEAD                      */
-/* -------------------------------------------------------------------------- */
-async function approveVacancyByDeptHead() {
-    const vacancyID = parseInt(await ask("Enter Vacancy ID to approve: "));
-    const signer = (await hre.ethers.getSigners())[activeUserIndex];
-
-    await contract.connect(signer).approveVacancybyDepartmentHead(vacancyID);
-    console.log("\nApproval Complete!");
-}
-
-/* -------------------------------------------------------------------------- */
-/*                          APPROVE AND POST VACANCY BY HR                    */
-/* -------------------------------------------------------------------------- */
-async function approveAndPostVacancyByHR() {
-    const vacancyID = parseInt(await ask("Enter Vacancy ID to approve and post: "));
-    const signer = (await hre.ethers.getSigners())[activeUserIndex];
-
-    await contract.connect(signer).approveAndPostVacancybyHR(vacancyID);
-    console.log("\nVacancy Approved and Posted by HR!");
-}
-
-/* -------------------------------------------------------------------------- */
-/*                          VIEW VACANCIES FOR APPLICANTS                     */
-/* -------------------------------------------------------------------------- */
-async function viewVacanciesForApplicants() {
-    const signer = (await hre.ethers.getSigners())[activeUserIndex];
-    const vacancies = await contract.getVacanciesforApplicants();
-
-    const table = createTable(["Vacancy IDs Available for Application"]);
-    vacancies.forEach((id) => table.push([id]));
+    const table = createKeyValueTable("Vacancy Requested");
+    table.push(
+        ["Vacancy ID", vacancyID],
+        ["Role", role],
+        ["DeptType", deptType],
+        ["Dept", dept],
+        ["Description", desc],
+        ["Requirements", req],
+        ["Requested By", `${member.Dept} ${member.Role} (${member.Name})`]
+    );
     console.log("\n" + table.toString());
+
+    console.log(
+        `\n${colors.logs}Vacancy ${vacancyID} Requested By ${member.Dept} ${member.Role} (${member.Name})${colors.reset}`
+    );
 }
 
-/* -------------------------------------------------------------------------- */
-/*                          APPLY FOR VACANCY                                 */
-/* -------------------------------------------------------------------------- */
-async function applyForVacancy() {
-    const vacancyID = parseInt(await ask("Enter Vacancy ID to apply for: "));
-    const signer = (await hre.ethers.getSigners())[activeUserIndex];
-
-    await contract.connect(signer).applyforVacancy(vacancyID);
-    console.log("\nApplication Submitted!");
-}
-
-/* -------------------------------------------------------------------------- */
-/*                          CHECK APPLICATION STATUS                         */
-/* -------------------------------------------------------------------------- */
-async function checkApplicationStatus() {
-    const vacancyID = parseInt(await ask("Enter Vacancy ID to check application status: "));
-    const signer = (await hre.ethers.getSigners())[activeUserIndex];
-
-    const status = await contract.checkApplicationStatusbyApplicant(vacancyID);
-    console.log(`\nYour application status: ${status}`);
-}
-
-/* -------------------------------------------------------------------------- */
-/*                          SELECT APPLICANT AND FILL VACANCY                 */
-/* -------------------------------------------------------------------------- */
-async function selectApplicantAndFillVacancy() {
-    const vacancyID = parseInt(await ask("Enter Vacancy ID to fill: "));
-    const applicantAddress = await ask("Enter Applicant Address: ");
-    const signer = (await hre.ethers.getSigners())[activeUserIndex];
-
-    await contract.connect(signer).selectApplicantbyHR(vacancyID, applicantAddress);
-    console.log("\nApplicant Selected and Vacancy Filled!");
-}
-
-/* -------------------------------------------------------------------------- */
-/*                          VIEW VACANCIES REQUIRING DEPT HEAD APPROVAL       */
-/* -------------------------------------------------------------------------- */
 async function getVacanciesRequiringDeptHeadApproval() {
-    const signer = (await hre.ethers.getSigners())[activeUserIndex];
-    const vacancies = await contract.getVacanciesRequiringDepartmentHeadApproval();
-
+    const vacancies =
+        await contract.getVacanciesRequiringDepartmentHeadApproval();
     const table = createTable(["Vacancy IDs Requiring Dept Head Approval"]);
     vacancies.forEach((id) => table.push([id]));
     console.log("\n" + table.toString());
 }
 
-/* -------------------------------------------------------------------------- */
-/*                          VIEW VACANCIES REQUIRING HR APPROVAL             */
-/* -------------------------------------------------------------------------- */
-async function getVacanciesRequiringHRApproval() {
+async function approveVacancyByDeptHead(vacancyID) {
     const signer = (await hre.ethers.getSigners())[activeUserIndex];
-    const vacancies = await contract.getVacanciesRequiringHRApproval();
+    const member = await contract.members(signer.address);
+    activeMember = member;
 
+    console.log(
+        `\n${colors.logs}${member.Dept} ${member.Role} (${member.Name}) Approving Vacancy${colors.reset}`
+    );
+
+    await contract.connect(signer).approveVacancybyDepartmentHead(vacancyID);
+
+    console.log(
+        `\n${colors.logs}Vacancy ${vacancyID} Approved By ${member.Dept} ${member.Role} (${member.Name})${colors.reset}`
+    );
+}
+
+async function getVacanciesRequiringHRApproval() {
+    const vacancies = await contract.getVacanciesRequiringHRApproval();
     const table = createTable(["Vacancy IDs Requiring HR Approval"]);
     vacancies.forEach((id) => table.push([id]));
     console.log("\n" + table.toString());
 }
 
-/* -------------------------------------------------------------------------- */
-/*                          CHANGE ACTIVE USER                                */
-/* -------------------------------------------------------------------------- */
-async function changeActiveUser() {
-    const signers = await hre.ethers.getSigners();
-    const table = createTable(["Index", "Address"]);
+async function approveAndPostVacancyByHR(vacancyID) {
+    const signer = (await hre.ethers.getSigners())[activeUserIndex];
+    const member = await contract.members(signer.address);
+    activeMember = member;
 
-    signers.forEach((s, i) => table.push([i, s.address]));
-    console.log(table.toString());
+    console.log(
+        `\n${colors.logs}${member.DeptType} ${member.Role} (${member.Name}) Approving And Posting Vacancy${colors.reset}`
+    );
 
-    const idx = parseInt(await ask("Select User Index: "));
-    if (idx >= 0 && idx < signers.length) {
-        activeUserIndex = idx;
-    }
+    await contract.connect(signer).approveAndPostVacancybyHR(vacancyID);
 
-    console.log(`\nActive User set to index ${activeUserIndex}`);
+    console.log(
+        `\n${colors.logs}Vacancy ${vacancyID} Approved And Posted By ${member.DeptType} ${member.Role} (${member.Name})${colors.reset}`
+    );
 }
 
-/* -------------------------------------------------------------------------- */
-/*                             DYNAMIC MENU                                    */
-/* -------------------------------------------------------------------------- */
+async function selectApplicantAndFillVacancy(vacancyID, applicantAddress) {
+    const signer = (await hre.ethers.getSigners())[activeUserIndex];
+    const member = await contract.members(signer.address);
+    activeMember = member;
+
+    await contract
+        .connect(signer)
+        .selectApplicantbyHR(vacancyID, applicantAddress);
+
+    console.log(
+        `\n${colors.logs}Applicant ${applicantAddress} Selected For Vacancy ${vacancyID} By ${member.DeptType} ${member.Role} (${member.Name})${colors.reset}`
+    );
+}
+
+async function viewVacanciesForApplicants() {
+    const vacancies = await contract.getVacanciesforApplicants();
+    const table = createTable(["Vacancy IDs Available For Application"]);
+    vacancies.forEach((id) => table.push([id]));
+    console.log("\n" + table.toString());
+}
+
+async function applyForVacancy(vacancyID) {
+    const signer = (await hre.ethers.getSigners())[activeUserIndex];
+    const member = await contract.members(signer.address);
+    activeMember = member;
+
+    console.log(
+        `\n${colors.logs}${member.Dept} ${member.Role} (${member.Name}) Applying For Vacancy${colors.reset}`
+    );
+
+    await contract.connect(signer).applyforVacancy(vacancyID);
+
+    console.log(
+        `\n${colors.logs}Application Submitted For Vacancy ${vacancyID} By ${member.Dept} ${member.Role} (${member.Name})${colors.reset}`
+    );
+}
+
+async function checkApplicationStatus(vacancyID) {
+    const signer = (await hre.ethers.getSigners())[activeUserIndex];
+    const member = await contract.members(signer.address);
+    activeMember = member;
+
+    const status = await contract
+        .connect(signer)
+        .checkApplicationStatusbyApplicant(vacancyID);
+
+    console.log(
+        `\n${colors.logs}Application Status For ${member.Dept} ${member.Role} (${member.Name}) - Vacancy ${vacancyID}: ${status}${colors.reset}`
+    );
+}
+
+async function simulate(contract) {
+    const signers = await hre.ethers.getSigners();
+    const requestedVacancy = {
+        vacancyID: 12,
+        role: await contract.roleTypes(1),
+        deptType: "Academics",
+        dept: "ComputerScience",
+        description: "Some-Random-Description",
+        requirements: "Some-Random-Requirements",
+    };
+
+    console.log(`\n${colors.logs}Simulation${colors.reset}`);
+
+    await changeActiveUser(0);
+    await requestVacancy(
+        requestedVacancy.vacancyID,
+        requestedVacancy.role,
+        requestedVacancy.deptType,
+        requestedVacancy.dept,
+        requestedVacancy.description,
+        requestedVacancy.requirements
+    );
+
+    await changeActiveUser(10);
+    await approveVacancyByDeptHead(requestedVacancy.vacancyID);
+
+    await changeActiveUser(19);
+    await approveAndPostVacancyByHR(requestedVacancy.vacancyID);
+
+    await changeActiveUser(15);
+    await applyForVacancy(requestedVacancy.vacancyID);
+    await checkApplicationStatus(requestedVacancy.vacancyID);
+
+    await changeActiveUser(19);
+    await selectApplicantAndFillVacancy(
+        requestedVacancy.vacancyID,
+        signers[15].address
+    );
+
+    await changeActiveUser(15);
+    await checkApplicationStatus(requestedVacancy.vacancyID);
+
+    console.log(`\n${colors.logs}Simulation Completed${colors.reset}`);
+}
+
 async function showMenu() {
     const options = [
-        { title: "1. Add Member", action: addMember },
-        { title: "2. Request Vacancy", action: requestVacancy },
-        { title: "3. Approve Vacancy (Dept Head)", action: approveVacancyByDeptHead },
-        { title: "4. Approve and Post Vacancy (HR)", action: approveAndPostVacancyByHR },
-        { title: "5. View Vacancies for Applicants", action: viewVacanciesForApplicants },
-        { title: "6. Apply for Vacancy", action: applyForVacancy },
-        { title: "7. Check Application Status", action: checkApplicationStatus },
-        { title: "8. Select Applicant and Fill Vacancy", action: selectApplicantAndFillVacancy },
-        { title: "9. View Vacancies Requiring Dept Head Approval", action: getVacanciesRequiringDeptHeadApproval },
-        { title: "10. View Vacancies Requiring HR Approval", action: getVacanciesRequiringHRApproval },
-        { title: "11. Change Active User", action: changeActiveUser },
-        { title: "12. View Member Details", action: viewMember }
+        {
+            title: "Add Member",
+            action: addMember,
+            prompts: [
+                {
+                    q: `${colors.prompt}Member Name: ${colors.reset}`,
+                    type: "string",
+                },
+                {
+                    q: `${colors.prompt}Member Role (Faculty/Staff/Applicant): ${colors.reset}`,
+                    type: "string",
+                },
+                {
+                    q: `${colors.prompt}Department Type (Academics/HumanResources): ${colors.reset}`,
+                    type: "string",
+                },
+                {
+                    q: `${colors.prompt}Department: ${colors.reset}`,
+                    type: "string",
+                },
+                {
+                    q: `${colors.prompt}Is The Member A Department Head? (yes/no): ${colors.reset}`,
+                    type: "bool",
+                },
+            ],
+        },
+        {
+            title: "Change Active User",
+            action: changeActiveUser,
+            prompts: [
+                {
+                    q: `${colors.prompt}Select User Index: ${colors.reset}`,
+                    type: "int",
+                },
+            ],
+        },
+        { title: "View Member Details", action: viewMember, prompts: [] },
+        {
+            title: "Request Vacancy",
+            action: requestVacancy,
+            prompts: [
+                {
+                    q: `${colors.prompt}Vacancy ID: ${colors.reset}`,
+                    type: "int",
+                },
+                {
+                    q: `${colors.prompt}Role Needed: ${colors.reset}`,
+                    type: "string",
+                },
+                {
+                    q: `${colors.prompt}DeptType: ${colors.reset}`,
+                    type: "string",
+                },
+                { q: `${colors.prompt}Dept: ${colors.reset}`, type: "string" },
+                {
+                    q: `${colors.prompt}Description: ${colors.reset}`,
+                    type: "string",
+                },
+                {
+                    q: `${colors.prompt}Requirements: ${colors.reset}`,
+                    type: "string",
+                },
+            ],
+        },
+        {
+            title: "View Vacancies Requiring Department Head Approval",
+            action: getVacanciesRequiringDeptHeadApproval,
+            prompts: [],
+        },
+        {
+            title: "Approve Vacancy By Department Head",
+            action: approveVacancyByDeptHead,
+            prompts: [
+                {
+                    q: `${colors.prompt}Vacancy ID To Approve: ${colors.reset}`,
+                    type: "int",
+                },
+            ],
+        },
+        {
+            title: "View Vacancies Requiring Human Resources Approval",
+            action: getVacanciesRequiringHRApproval,
+            prompts: [],
+        },
+        {
+            title: "Approve And Post Vacancy By Human Resources",
+            action: approveAndPostVacancyByHR,
+            prompts: [
+                {
+                    q: `${colors.prompt}Vacancy ID To Approve And Post: ${colors.reset}`,
+                    type: "int",
+                },
+            ],
+        },
+        {
+            title: "Select Applicant And Fill Vacancy",
+            action: selectApplicantAndFillVacancy,
+            prompts: [
+                {
+                    q: `${colors.prompt}Vacancy ID To Fill: ${colors.reset}`,
+                    type: "int",
+                },
+                {
+                    q: `${colors.prompt}Applicant Address: ${colors.reset}`,
+                    type: "string",
+                },
+            ],
+        },
+        {
+            title: "View Vacancies For Applicants",
+            action: viewVacanciesForApplicants,
+            prompts: [],
+        },
+        {
+            title: "Apply For Vacancy",
+            action: applyForVacancy,
+            prompts: [
+                {
+                    q: `${colors.prompt}Vacancy ID To Apply For: ${colors.reset}`,
+                    type: "int",
+                },
+            ],
+        },
+        {
+            title: "Check Application Status",
+            action: checkApplicationStatus,
+            prompts: [
+                {
+                    q: `${colors.prompt}Vacancy ID To Check Application Status: ${colors.reset}`,
+                    type: "int",
+                },
+            ],
+        },
     ];
 
-    console.log("\nSelect an option from the menu:");
+    console.log(bl);
+    console.log(bl);
+    console.log(`\n${colors.logs}Menu Options${colors.reset}`);
+    const table = createTable(["Sl.", "Option"]);
+    options.forEach((option, idx) => table.push([idx + 1, option.title]));
+    console.log("\n" + table.toString());
 
-    options.forEach(option => {
-        console.log(option.title);
-    });
+    const choice = parseInt(
+        await ask(`${colors.prompt}\nUser Choice: ${colors.reset}`)
+    );
+    console.log(bl);
 
-    const choice = parseInt(await ask("Enter your choice: "));
-
-    // Ensure the choice is valid
-    if (choice >= 1 && choice <= options.length) {
-        await options[choice - 1].action();
-    } else {
-        console.log("Invalid choice. Please select a valid option.");
+    if (choice < 1 || choice > options.length) {
+        console.log(
+            `\n${colors.logs}Invalid Choice. Please Select A Valid Option${colors.reset}`
+        );
+        return;
     }
+
+    const opt = options[choice - 1];
+    const values = [];
+    if (opt.prompts && opt.prompts.length > 0) {
+        for (const p of opt.prompts) {
+            const ans = await ask(p.q);
+            if (p.type === "int") values.push(parseInt(ans));
+            else if (p.type === "bool")
+                values.push((ans || "").toLowerCase() === "yes");
+            else values.push(ans);
+        }
+    }
+
+    await opt.action(...values);
 }
 
-/* -------------------------------------------------------------------------- */
-/*                         START PROGRAM                                       */
-/* -------------------------------------------------------------------------- */
 async function main() {
-    contract = await deployContract();  // Deploy contract
-    autoAssignMembers();
-    while (true) {
-        await showMenu();  // Show the dynamic menu
-    }
+    console.log(bl);
+    contract = await deployContract();
+    console.log(bl);
+    await autoAssignMembers();
+    console.log(bl);
+    await simulate(contract);
+    while (true) await showMenu();
 }
 
 main();
