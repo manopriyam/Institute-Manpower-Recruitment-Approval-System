@@ -299,4 +299,15 @@ contract InstituteRecruitment {
         }
         return false;
     }
+
+    // CA ke functions
+    function verifyCertificate(bytes32 fileHash) public view returns (bool valid, address issuer, string memory rollNo) {
+        Certificate memory c = certificates[fileHash];
+        if (c.issuer == address(0) || c.revoked) {
+            return (false, address(0), "");
+        }
+        return (true, c.issuer, c.rollNo);
+    }
+
+    
 }

@@ -294,6 +294,7 @@ async function showMenu() {
         { title: "10. View Vacancies Requiring HR Approval", action: getVacanciesRequiringHRApproval },
         { title: "11. Change Active User", action: changeActiveUser },
         { title: "12. View Member Details", action: viewMember }
+        // , { title: "13. Verifying Applicant", action: verifyApplicant } 
     ];
 
     console.log("\nSelect an option from the menu:");
