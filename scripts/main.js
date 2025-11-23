@@ -305,6 +305,62 @@ async function checkApplicationStatus(vacancyID) {
     );
 }
 
+async function requestCertificateIssuanceFromCA() {
+    const signer = (await hre.ethers.getSigners())[activeUserIndex];
+    const member = await contract.members(signer.address);
+
+    console.log(
+        `\n${colors.logs}${member.Name} Requesting Certificate${colors.reset}`
+    );
+    await contract.connect(signer).requestCertificateIssuance();
+
+    const tbl = createKeyValueTable("Certificate Request");
+    tbl.push(["Requested By", member.Name], ["Dept", member.Dept]);
+    console.log("\n" + tbl.toString());
+}
+
+async function issueCertificateByCA() {
+    const signer = (await hre.ethers.getSigners())[activeUserIndex];
+    const member = await contract.members(signer.address);
+
+    console.log(
+        `\n${colors.logs}${member.Name} Issuing Certificate${colors.reset}`
+    );
+    await contract.connect(signer).issueCertificate();
+
+    const tbl = createKeyValueTable("Certificate Issued");
+    tbl.push(["Issued By", member.Name], ["DeptType", member.DeptType]);
+    console.log("\n" + tbl.toString());
+}
+
+async function requestVerificationFromCA() {
+    const signer = (await hre.ethers.getSigners())[activeUserIndex];
+    const member = await contract.members(signer.address);
+
+    console.log(
+        `\n${colors.logs}${member.Name} Requesting Verification${colors.reset}`
+    );
+    await contract.connect(signer).requestVerification();
+
+    const tbl = createKeyValueTable("Verification Request");
+    tbl.push(["Requested By", member.Name], ["DeptType", member.DeptType]);
+    console.log("\n" + tbl.toString());
+}
+
+async function verifyRequestsByCA() {
+    const signer = (await hre.ethers.getSigners())[activeUserIndex];
+    const member = await contract.members(signer.address);
+
+    console.log(
+        `\n${colors.logs}${member.Name} Verifying Certificates${colors.reset}`
+    );
+    await contract.connect(signer).verifyPendingCertificates();
+
+    const tbl = createKeyValueTable("Verification Completed");
+    tbl.push(["Verified By", member.Name], ["DeptType", member.DeptType]);
+    console.log("\n" + tbl.toString());
+}
+
 async function simulate(contract) {
     const signers = await hre.ethers.getSigners();
     const requestedVacancy = {
@@ -337,6 +393,18 @@ async function simulate(contract) {
     await changeActiveUser(15);
     await applyForVacancy(requestedVacancy.vacancyID);
     await checkApplicationStatus(requestedVacancy.vacancyID);
+
+    await changeActiveUser(15);
+    await requestCertificateIssuanceFromCA();
+
+    await changeActiveUser(18);
+    await issueCertificateByCA();
+
+    await changeActiveUser(19);
+    await requestVerificationFromCA();
+
+    await changeActiveUser(18);
+    await verifyRequestsByCA();
 
     await changeActiveUser(19);
     await selectApplicantAndFillVacancy(
@@ -447,6 +515,11 @@ async function showMenu() {
             ],
         },
         {
+            title: "Request Verification By Human-Resources From Certifying Authority ",
+            action: requestVerificationFromCA,
+            prompts: [],
+        },
+        {
             title: "Select Applicant And Fill Vacancy",
             action: selectApplicantAndFillVacancy,
             prompts: [
@@ -476,6 +549,11 @@ async function showMenu() {
             ],
         },
         {
+            title: "Request Certificate Issuance By Applicant From Certifying Authority",
+            action: requestCertificateIssuanceFromCA,
+            prompts: [],
+        },
+        {
             title: "Check Application Status",
             action: checkApplicationStatus,
             prompts: [
@@ -484,6 +562,16 @@ async function showMenu() {
                     type: "int",
                 },
             ],
+        },
+        {
+            title: "Issue Certificate By Certifying Authority ",
+            action: issueCertificateByCA,
+            prompts: [],
+        },
+        {
+            title: "Verify Requests By Certifying Authority",
+            action: verifyRequestsByCA,
+            prompts: [],
         },
     ];
 

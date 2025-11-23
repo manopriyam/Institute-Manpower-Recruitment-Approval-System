@@ -283,6 +283,59 @@ contract InstituteRecruitment {
 
         revert("You have not applied for this vacancy");
     }
+        /* -------------------------------------------------------------------------- */
+    /*                        CERTIFICATE ISSUANCE (DUMMY)                         */
+    /* -------------------------------------------------------------------------- */
+
+    mapping(address => bool) public certificateRequested;
+    mapping(address => bool) public certificateIssued;
+    mapping(address => bool) public verificationRequested;
+    mapping(address => bool) public verificationCompleted;
+
+    /* ---------------------------- candidate → CA ------------------------------ */
+    function requestCertificateIssuance() public {
+        require(checkMember(msg.sender), "Not a member");
+        require(
+            keccak256(bytes(members[msg.sender].Role)) ==
+            keccak256(bytes("Applicant")),
+            "Only applicants"
+        );
+        certificateRequested[msg.sender] = true;
+    }
+
+    /* ------------------------------ CA → issue -------------------------------- */
+    function issueCertificate() public {
+        require(checkMember(msg.sender), "Not a member");
+        require(
+            keccak256(bytes(members[msg.sender].DeptType)) ==
+            keccak256(bytes("Certifying-Authority")),
+            "Only CA"
+        );
+        certificateIssued[msg.sender] = true;
+    }
+
+    /* ------------------------------ HR → CA ----------------------------------- */
+    function requestVerification() public {
+        require(checkMember(msg.sender), "Not a member");
+        require(
+            keccak256(bytes(members[msg.sender].DeptType)) ==
+            keccak256(bytes("Human-Resources")),
+            "Only HR"
+        );
+        verificationRequested[msg.sender] = true;
+    }
+
+    /* ------------------------------ CA verifies -------------------------------- */
+    function verifyPendingCertificates() public {
+        require(checkMember(msg.sender), "Not a member");
+        require(
+            keccak256(bytes(members[msg.sender].DeptType)) ==
+            keccak256(bytes("Certifying-Authority")),
+            "Only CA"
+        );
+        verificationCompleted[msg.sender] = true;
+    }
+
 
     /* -------------------------------------------------------------------------- */
     /*                            HELPER FUNCTIONS                                  */
